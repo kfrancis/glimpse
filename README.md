@@ -1,6 +1,6 @@
 # Glimpse.SimpleInjector
 
-This simple Glimpse plug-in shows the current [Simple Injector](https://simpleinjector.org) container configuration:
+This simple [Glimpse](http://getglimpse.com/) plug-in shows the current [Simple Injector](https://simpleinjector.org) container configuration:
 
 - **Resolved Types** lists the types that were resolved for each service call
 - **Diagnostics** reports any diagnostic errors or warnings found in the current configuration
