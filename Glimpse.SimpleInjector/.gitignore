@@ -1,0 +1,15 @@
+obj
+bin
+_ReSharper.*
+*ncrunch*
+*.csproj.user
+*.resharper.user
+*.resharper
+*.suo
+*.cache
+~$*
+*.tmp
+build
+codecoverage
+src/VersionInfo.cs
+*scc
