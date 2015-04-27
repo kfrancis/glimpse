@@ -44,6 +44,7 @@ namespace Glimpse.SimpleInjector
         private static readonly ConcurrentDictionary<InstanceProducer, string> ObjectGraphs =
             new ConcurrentDictionary<InstanceProducer, string>();
 
+        private static object Container;
         private static object[] DiagnosticWarnings;
         private static object[] KnownRegistrations;
         private static object[] RootRegistrations;
@@ -58,6 +59,12 @@ namespace Glimpse.SimpleInjector
             DiagnosticWarnings = GetDiagnosticWarnings(container).ToArray();
             RootRegistrations = GetRootRegistrations(container).ToArray();
             KnownRegistrations = GetContainerRegistrations(container).ToArray();
+
+            Container = new
+            {
+                version = typeof(Container).Assembly.GetName().Version.ToString(),
+                options = container.Options.ToString(),
+            };
         }
 
         public override string Name
@@ -74,6 +81,7 @@ namespace Glimpse.SimpleInjector
         {
             return new
             {
+                container = Container,
                 resolvedInstances = GetResolvedItemsForCurrentRequest(),
                 createdInstances = GetCreatedItemsForCurrentRequest(),
                 diagnosticWarnings = DiagnosticWarnings,
@@ -115,7 +123,12 @@ namespace Glimpse.SimpleInjector
                 from result in Analyzer.Analyze(container)
                 where result.DiagnosticType != DiagnosticType.ContainerRegisteredComponent
                 where result.DiagnosticType != DiagnosticType.SingleResponsibilityViolation
-                select new { Type = result.ServiceType.ToFriendlyName(), result.Description };
+                select new 
+                {
+                    type = result.DiagnosticType.ToString(),
+                    service = result.ServiceType.ToFriendlyName(),
+                    description = result.Description,
+                };
         }
 
         private static IEnumerable<object> GetContainerRegistrations(Container container)
