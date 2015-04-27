@@ -1,30 +1,52 @@
-﻿using System;
-using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.Linq;
-using System.Runtime.CompilerServices;
-using System.Web;
-using Glimpse.AspNet.Extensibility;
-using Glimpse.Core.Extensibility;
-using SimpleInjector;
-using SimpleInjector.Advanced;
-using SimpleInjector.Diagnostics;
+﻿#region Copyright Simple Injector Contributors
+/* The Simple Injector is an easy-to-use Inversion of Control library for .NET
+ * 
+ * Copyright (c) 2015 Simple Injector Contributors
+ * 
+ * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and 
+ * associated documentation files (the "Software"), to deal in the Software without restriction, including 
+ * without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell 
+ * copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the 
+ * following conditions:
+ * 
+ * The above copyright notice and this permission notice shall be included in all copies or substantial 
+ * portions of the Software.
+ * 
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT 
+ * LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO 
+ * EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER 
+ * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE 
+ * USE OR OTHER DEALINGS IN THE SOFTWARE.
+*/
+#endregion
+
+// By using a weak table, the stored items in the list will be garbage collected automatically, and
+// by using the HttpContext as key, we allow each request to retrieve its own instances.
 using CurrentRequestCache = System.Runtime.CompilerServices.ConditionalWeakTable<System.Web.HttpContext, System.Collections.Generic.List<SimpleInjector.Advanced.InstanceInitializationData>>;
 
 namespace Glimpse.SimpleInjector
 {
+    using System;
+    using System.Collections.Concurrent;
+    using System.Collections.Generic;
+    using System.Linq;
+    using System.Web;
+    using Glimpse.AspNet.Extensibility;
+    using Glimpse.Core.Extensibility;
+    using global::SimpleInjector;
+    using global::SimpleInjector.Advanced;
+    using global::SimpleInjector.Diagnostics;
+
     public class SimpleInjectorTab : AspNetTab, IDocumentation
     {
-        // By using a weak table, the stored items in the list will be garbage collected automatically, and
-        // by using the HttpContext as key, we allow each request to retrieve its own instances.
         private static readonly CurrentRequestCache ResolvedInstances = new CurrentRequestCache();
         private static readonly CurrentRequestCache CreatedInstances = new CurrentRequestCache();
         private static readonly ConcurrentDictionary<InstanceProducer, string> ObjectGraphs =
             new ConcurrentDictionary<InstanceProducer, string>();
 
-        private static IEnumerable<object> DiagnosticWarnings;
-        private static IEnumerable<object> KnownRegistrations;
-        private static IEnumerable<object> RootRegistrations;
+        private static object[] DiagnosticWarnings;
+        private static object[] KnownRegistrations;
+        private static object[] RootRegistrations;
 
         public static void ConfigureGlimpseAndVerifyContainer(Container container)
         {
@@ -93,31 +115,7 @@ namespace Glimpse.SimpleInjector
                 from result in Analyzer.Analyze(container)
                 where result.DiagnosticType != DiagnosticType.ContainerRegisteredComponent
                 where result.DiagnosticType != DiagnosticType.SingleResponsibilityViolation
-                select BuildResult(result);
-        }
-
-        private static object BuildGroup(DiagnosticGroup group)
-        {
-            return new
-            {
-                Name = group.Name,
-                Items = group.Children.Select(BuildGroup).Concat(group.Results.Select(BuildResult)).ToArray()
-            };
-        }
-
-        private static object BuildResult(DiagnosticResult result)
-        {
-            return new { Type = result.ServiceType.ToFriendlyName(), result.Description };
-        }
-
-        private static DiagnosticGroup GetRootGroup(DiagnosticGroup group)
-        {
-            while (group.Parent != null)
-            {
-                group = group.Parent;
-            }
-
-            return group;
+                select new { Type = result.ServiceType.ToFriendlyName(), result.Description };
         }
 
         private static IEnumerable<object> GetContainerRegistrations(Container container)
@@ -148,9 +146,7 @@ namespace Glimpse.SimpleInjector
         private static object CollectResolvedInstance(InitializationContext context, Func<object> instanceProducer)
         {
             object instance = instanceProducer();
-
             GetListForCurrentRequest(ResolvedInstances).Add(new InstanceInitializationData(context, instance));
-
             return instance;
         }
 
