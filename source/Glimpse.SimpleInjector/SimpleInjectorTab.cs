@@ -20,16 +20,14 @@
 */
 #endregion
 
-// By using a weak table, the stored items in the list will be garbage collected automatically, and
-// by using the HttpContext as key, we allow each request to retrieve its own instances.
-using CurrentRequestCache = System.Runtime.CompilerServices.ConditionalWeakTable<System.Web.HttpContext, System.Collections.Generic.List<SimpleInjector.Advanced.InstanceInitializationData>>;
-
 namespace Glimpse.SimpleInjector
 {
     using System;
     using System.Collections.Concurrent;
     using System.Collections.Generic;
+    using System.Globalization;
     using System.Linq;
+    using System.Runtime.CompilerServices;
     using System.Web;
     using Glimpse.AspNet.Extensibility;
     using Glimpse.Core.Extensibility;
@@ -39,8 +37,12 @@ namespace Glimpse.SimpleInjector
 
     public class SimpleInjectorTab : AspNetTab, IDocumentation
     {
-        private static readonly CurrentRequestCache ResolvedInstances = new CurrentRequestCache();
-        private static readonly CurrentRequestCache CreatedInstances = new CurrentRequestCache();
+        // By using a weak table, the stored items in the list will be garbage collected automatically, and
+        // by using the HttpContext as key, we allow each request to retrieve its own instances.
+        private static readonly ConditionalWeakTable<HttpContext, List<InstanceInitializationData>> ResolvedInstances = 
+            new System.Runtime.CompilerServices.ConditionalWeakTable<HttpContext, List<InstanceInitializationData>>();
+        private static readonly ConditionalWeakTable<HttpContext, List<InstanceInitializationData>> CreatedInstances = 
+            new System.Runtime.CompilerServices.ConditionalWeakTable<HttpContext, List<InstanceInitializationData>>();
         private static readonly ConcurrentDictionary<InstanceProducer, string> ObjectGraphs =
             new ConcurrentDictionary<InstanceProducer, string>();
 
@@ -51,6 +53,11 @@ namespace Glimpse.SimpleInjector
 
         public static void ConfigureGlimpseAndVerifyContainer(Container container)
         {
+            if (Container != null)
+            {
+                throw new InvalidOperationException("This method can only be called once.");
+            }
+
             container.Options.RegisterResolveInterceptor(CollectResolvedInstance, Always);
             container.RegisterInitializer(CollectCreatedInstance, Always);
             
@@ -96,8 +103,8 @@ namespace Glimpse.SimpleInjector
                 from data in GetListForCurrentRequest(ResolvedInstances)
                 select new
                 {
-                    service = data.Context.Producer.ServiceType.ToFriendlyName(),
-                    implementation = data.Context.Registration.ImplementationType.ToFriendlyName(),
+                    service = ToFriendlyName(data.Context.Producer.ServiceType),
+                    implementation = ToFriendlyName(data.Context.Registration.ImplementationType),
                     lifestyle = data.Context.Registration.Lifestyle.Name,
                     graph = VisualizeObjectGraph(data.Context.Producer)
                 })
@@ -110,8 +117,8 @@ namespace Glimpse.SimpleInjector
                 from data in GetListForCurrentRequest(CreatedInstances)
                 select new
                 {
-                    service = data.Context.Producer.ServiceType.ToFriendlyName(),
-                    implementation = data.Context.Registration.ImplementationType.ToFriendlyName(),
+                    service = ToFriendlyName(data.Context.Producer.ServiceType),
+                    implementation = ToFriendlyName(data.Context.Registration.ImplementationType),
                     lifestyle = data.Context.Registration.Lifestyle.Name,
                 })
                 .ToArray();
@@ -126,7 +133,7 @@ namespace Glimpse.SimpleInjector
                 select new 
                 {
                     type = result.DiagnosticType.ToString(),
-                    service = result.ServiceType.ToFriendlyName(),
+                    service = ToFriendlyName(result.ServiceType),
                     description = result.Description,
                 };
         }
@@ -135,11 +142,11 @@ namespace Glimpse.SimpleInjector
         {
             return
                 from producer in container.GetCurrentRegistrations()
-                orderby producer.ServiceType.ToFriendlyName()
+                orderby ToFriendlyName(producer.ServiceType)
                 select new
                 {
-                    service = producer.ServiceType.ToFriendlyName(),
-                    implementation = producer.Registration.ImplementationType.ToFriendlyName(),
+                    service = ToFriendlyName(producer.ServiceType),
+                    implementation = ToFriendlyName(producer.Registration.ImplementationType),
                     lifestyle = producer.Registration.Lifestyle.Name,
                 };
         }
@@ -148,10 +155,10 @@ namespace Glimpse.SimpleInjector
         {
             return
                 from producer in container.GetRootRegistrations()
-                orderby producer.ServiceType.ToFriendlyName()
+                orderby ToFriendlyName(producer.ServiceType)
                 select new
                 {
-                    service = producer.ServiceType.ToFriendlyName(),
+                    service = ToFriendlyName(producer.ServiceType),
                     graph = VisualizeObjectGraph(producer),
                 };
         }
@@ -168,7 +175,8 @@ namespace Glimpse.SimpleInjector
             GetListForCurrentRequest(CreatedInstances).Add(instance);
         }
 
-        private static List<InstanceInitializationData> GetListForCurrentRequest(CurrentRequestCache dictionary)
+        private static List<InstanceInitializationData> GetListForCurrentRequest(
+            ConditionalWeakTable<HttpContext, List<InstanceInitializationData>> dictionary)
         {
             HttpContext currentRequest = HttpContext.Current;
 
@@ -199,6 +207,49 @@ namespace Glimpse.SimpleInjector
         private static bool Always(InitializationContext context)
         {
             return true;
+        }
+
+        private static string ToFriendlyName(Type type)
+        {
+            if (type.IsArray)
+            {
+                return ToFriendlyName(type.GetElementType()) + "[]";
+            }
+
+            string name = type.Name;
+
+            if (type.IsNested && !type.IsGenericParameter)
+            {
+                name = ToFriendlyName(type.DeclaringType) + "." + type.Name;
+            }
+
+            var genericArguments = GetGenericArguments(type);
+
+            if (!genericArguments.Any())
+            {
+                return name;
+            }
+
+            name = name.Substring(0, name.IndexOf('`'));
+
+            return name + "<" + string.Join(", ", genericArguments.Select(ToFriendlyName)) + ">";
+        }
+
+        private static IEnumerable<Type> GetGenericArguments(Type type)
+        {
+            if (!type.Name.Contains("`"))
+            {
+                return Enumerable.Empty<Type>();
+            }
+
+            int numberOfGenericArguments = Convert.ToInt32(type.Name.Substring(type.Name.IndexOf('`') + 1),
+                 CultureInfo.InvariantCulture);
+
+            var argumentOfTypeAndOuterType = type.GetGenericArguments();
+
+            return argumentOfTypeAndOuterType
+                .Skip(argumentOfTypeAndOuterType.Length - numberOfGenericArguments)
+                .ToArray();
         }
     }
 }

@@ -6,11 +6,11 @@ using System.Runtime.InteropServices;
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
 [assembly: AssemblyTitle("Glimpse.SimpleInjector")]
-[assembly: AssemblyDescription("")]
+[assembly: AssemblyDescription("Simple Injector plug-in for Glimpse.")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("")]
+[assembly: AssemblyCompany("Simple Injector Contributors")]
 [assembly: AssemblyProduct("Glimpse.SimpleInjector")]
-[assembly: AssemblyCopyright("Copyright ©  2014")]
+[assembly: AssemblyCopyright("Copyright © 2013-2015 Simple Injector Contributors")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 
