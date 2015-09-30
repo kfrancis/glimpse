@@ -103,7 +103,7 @@ namespace Glimpse.SimpleInjector
                 from data in GetListForCurrentRequest(ResolvedInstances)
                 select new
                 {
-                    service = ToFriendlyName(data.Context.Producer.ServiceType),
+                    service = ToFriendlyName(GetServiceType(data.Context)),
                     implementation = ToFriendlyName(data.Context.Registration.ImplementationType),
                     lifestyle = data.Context.Registration.Lifestyle.Name,
                     graph = VisualizeObjectGraph(data.Context.Producer)
@@ -117,11 +117,18 @@ namespace Glimpse.SimpleInjector
                 from data in GetListForCurrentRequest(CreatedInstances)
                 select new
                 {
-                    service = ToFriendlyName(data.Context.Producer.ServiceType),
+                    service = ToFriendlyName(GetServiceType(data.Context)),
                     implementation = ToFriendlyName(data.Context.Registration.ImplementationType),
                     lifestyle = data.Context.Registration.Lifestyle.Name,
                 })
                 .ToArray();
+        }
+
+        private static Type GetServiceType(InitializationContext context)
+        {
+            return context.Producer != null 
+                ? context.Producer.ServiceType 
+                : context.Registration.ImplementationType;
         }
 
         private static IEnumerable<object> GetDiagnosticWarnings(Container container)
