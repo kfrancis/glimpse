@@ -1,6 +1,6 @@
 # Glimpse.SimpleInjector
 
-[![NuGet](https://img.shields.io/nuget/dt/Glimpse.SimpleInjector.svg)](https://www.nuget.org/packages/Glimpse.SimpleInjector) [![NuGet](https://img.shields.io/nuget/v/Glimpse.SimpleInjector.svg)](https://www.nuget.org/packages/Glimpse.SimpleInjector)
+[![NuGet](https://img.shields.io/nuget/v/Glimpse.SimpleInjector.svg)](https://www.nuget.org/packages/Glimpse.SimpleInjector)
 
 This simple [Glimpse](http://getglimpse.com/) plug-in shows the current [Simple Injector](https://simpleinjector.org) container configuration:
 
