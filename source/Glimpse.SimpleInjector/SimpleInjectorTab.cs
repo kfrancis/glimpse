@@ -1,7 +1,7 @@
 ﻿#region Copyright Simple Injector Contributors
 /* The Simple Injector is an easy-to-use Inversion of Control library for .NET
  * 
- * Copyright (c) 2015 Simple Injector Contributors
+ * Copyright (c) 2015-2017 Simple Injector Contributors
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and 
  * associated documentation files (the "Software"), to deal in the Software without restriction, including 
@@ -25,7 +25,6 @@ namespace Glimpse.SimpleInjector
     using System;
     using System.Collections.Concurrent;
     using System.Collections.Generic;
-    using System.Globalization;
     using System.Linq;
     using System.Runtime.CompilerServices;
     using System.Web;
@@ -39,10 +38,10 @@ namespace Glimpse.SimpleInjector
     {
         // By using a weak table, the stored items in the list will be garbage collected automatically, and
         // by using the HttpContext as key, we allow each request to retrieve its own instances.
-        private static readonly ConditionalWeakTable<HttpContext, List<InstanceInitializationData>> ResolvedInstances = 
-            new System.Runtime.CompilerServices.ConditionalWeakTable<HttpContext, List<InstanceInitializationData>>();
+        private static readonly ConditionalWeakTable<HttpContext, List<InitializationData>> ResolvedInstances = 
+            new ConditionalWeakTable<HttpContext, List<InitializationData>>();
         private static readonly ConditionalWeakTable<HttpContext, List<InstanceInitializationData>> CreatedInstances = 
-            new System.Runtime.CompilerServices.ConditionalWeakTable<HttpContext, List<InstanceInitializationData>>();
+            new ConditionalWeakTable<HttpContext, List<InstanceInitializationData>>();
         private static readonly ConcurrentDictionary<InstanceProducer, string> ObjectGraphs =
             new ConcurrentDictionary<InstanceProducer, string>();
 
@@ -74,15 +73,9 @@ namespace Glimpse.SimpleInjector
             };
         }
 
-        public override string Name
-        {
-            get { return "Simple Injector"; }
-        }
+        public override string Name => "Simple Injector";
 
-        public string DocumentationUri
-        {
-            get { return "https://simpleinjector.org/documentation"; }
-        }
+        public string DocumentationUri => "https://simpleinjector.org/documentation";
 
         public override object GetData(ITabContext context)
         {
@@ -103,8 +96,8 @@ namespace Glimpse.SimpleInjector
                 from data in GetListForCurrentRequest(ResolvedInstances)
                 select new
                 {
-                    service = ToFriendlyName(GetServiceType(data.Context)),
-                    implementation = ToFriendlyName(data.Context.Registration.ImplementationType),
+                    service = GetServiceType(data.Context).ToFriendlyName(),
+                    implementation = data.Context.Registration.ImplementationType.ToFriendlyName(),
                     lifestyle = data.Context.Registration.Lifestyle.Name,
                     graph = VisualizeObjectGraph(data.Context.Producer)
                 })
@@ -115,32 +108,27 @@ namespace Glimpse.SimpleInjector
         {
             return (
                 from data in GetListForCurrentRequest(CreatedInstances)
+                let registration = data.Context.Registration
                 select new
                 {
-                    service = ToFriendlyName(GetServiceType(data.Context)),
-                    implementation = ToFriendlyName(data.Context.Registration.ImplementationType),
-                    lifestyle = data.Context.Registration.Lifestyle.Name,
+                    implementation = registration.ImplementationType.ToFriendlyName(),
+                    lifestyle = registration.Lifestyle.Name,
                 })
                 .ToArray();
         }
 
-        private static Type GetServiceType(InitializationContext context)
-        {
-            return context.Producer != null 
-                ? context.Producer.ServiceType 
-                : context.Registration.ImplementationType;
-        }
+        private static Type GetServiceType(InitializationContext context) =>
+            context.Producer?.ServiceType ?? context.Registration.ImplementationType;
 
         private static IEnumerable<object> GetDiagnosticWarnings(Container container)
         {
             return
                 from result in Analyzer.Analyze(container)
-                where result.DiagnosticType != DiagnosticType.ContainerRegisteredComponent
-                where result.DiagnosticType != DiagnosticType.SingleResponsibilityViolation
+                where result.Severity != DiagnosticSeverity.Information
                 select new 
                 {
                     type = result.DiagnosticType.ToString(),
-                    service = ToFriendlyName(result.ServiceType),
+                    service = result.ServiceType.ToFriendlyName(),
                     description = result.Description,
                 };
         }
@@ -149,11 +137,11 @@ namespace Glimpse.SimpleInjector
         {
             return
                 from producer in container.GetCurrentRegistrations()
-                orderby ToFriendlyName(producer.ServiceType)
+                orderby producer.ServiceType.ToFriendlyName()
                 select new
                 {
-                    service = ToFriendlyName(producer.ServiceType),
-                    implementation = ToFriendlyName(producer.Registration.ImplementationType),
+                    service = producer.ServiceType.ToFriendlyName(),
+                    implementation = producer.Registration.ImplementationType.ToFriendlyName(),
                     lifestyle = producer.Registration.Lifestyle.Name,
                 };
         }
@@ -162,10 +150,10 @@ namespace Glimpse.SimpleInjector
         {
             return
                 from producer in container.GetRootRegistrations()
-                orderby ToFriendlyName(producer.ServiceType)
+                orderby producer.ServiceType.ToFriendlyName()
                 select new
                 {
-                    service = ToFriendlyName(producer.ServiceType),
+                    service = producer.ServiceType.ToFriendlyName(),
                     graph = VisualizeObjectGraph(producer),
                 };
         }
@@ -173,7 +161,7 @@ namespace Glimpse.SimpleInjector
         private static object CollectResolvedInstance(InitializationContext context, Func<object> instanceProducer)
         {
             object instance = instanceProducer();
-            GetListForCurrentRequest(ResolvedInstances).Add(new InstanceInitializationData(context, instance));
+            GetListForCurrentRequest(ResolvedInstances).Add(new InitializationData(context, instance));
             return instance;
         }
 
@@ -182,81 +170,45 @@ namespace Glimpse.SimpleInjector
             GetListForCurrentRequest(CreatedInstances).Add(instance);
         }
 
-        private static List<InstanceInitializationData> GetListForCurrentRequest(
-            ConditionalWeakTable<HttpContext, List<InstanceInitializationData>> dictionary)
+        private static List<T> GetListForCurrentRequest<T>(ConditionalWeakTable<HttpContext, List<T>> dictionary)
         {
             HttpContext currentRequest = HttpContext.Current;
 
             if (currentRequest == null)
             {
-                return new List<InstanceInitializationData>();
+                return new List<T>();
             }
 
             lock (dictionary)
             {
-                List<InstanceInitializationData> currentRequestInstances;
+                List<T> currentRequestInstances;
 
                 if (!dictionary.TryGetValue(currentRequest, out currentRequestInstances))
                 {
                     dictionary.Add(currentRequest,
-                        currentRequestInstances = new List<InstanceInitializationData>(capacity: 32));
+                        currentRequestInstances = new List<T>(capacity: 32));
                 }
 
                 return currentRequestInstances;
             }
         }
 
-        private static string VisualizeObjectGraph(InstanceProducer producer)
+        private static string VisualizeObjectGraph(InstanceProducer producer) =>
+            ObjectGraphs.GetOrAdd(producer, p => p.VisualizeObjectGraph());
+
+        private static bool Always(InitializationContext context) => true;
+        private static bool Always(InitializerContext context) => true;
+
+        private struct InitializationData
         {
-            return ObjectGraphs.GetOrAdd(producer, p => p.VisualizeObjectGraph());
-        }
+            public readonly InitializationContext Context;
+            public readonly object Instance;
 
-        private static bool Always(InitializationContext context)
-        {
-            return true;
-        }
-
-        private static string ToFriendlyName(Type type)
-        {
-            if (type.IsArray)
+            public InitializationData(InitializationContext context, object instance)
             {
-                return ToFriendlyName(type.GetElementType()) + "[]";
+                this.Context = context;
+                this.Instance = instance;
             }
-
-            string name = type.Name;
-
-            if (type.IsNested && !type.IsGenericParameter)
-            {
-                name = ToFriendlyName(type.DeclaringType) + "." + type.Name;
-            }
-
-            var genericArguments = GetGenericArguments(type);
-
-            if (!genericArguments.Any())
-            {
-                return name;
-            }
-
-            name = name.Substring(0, name.IndexOf('`'));
-
-            return name + "<" + string.Join(", ", genericArguments.Select(ToFriendlyName)) + ">";
-        }
-
-        private static IEnumerable<Type> GetGenericArguments(Type type)
-        {
-            if (!type.Name.Contains("`"))
-            {
-                return Enumerable.Empty<Type>();
-            }
-
-            int numberOfGenericArguments = Convert.ToInt32(type.Name.Substring(type.Name.IndexOf('`') + 1),
-                 CultureInfo.InvariantCulture);
-
-            var argumentOfTypeAndOuterType = type.GetGenericArguments();
-
-            return argumentOfTypeAndOuterType
-                .Skip(argumentOfTypeAndOuterType.Length - numberOfGenericArguments)
-                .ToArray();
         }
     }
 }
